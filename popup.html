@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WordPress GPT Content Generator</title>
+  <link href="styles.css" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>WordPress GPT Content Generator</h1>
+      <div class="api-key-section">
+        <input type="password" id="apiKey" placeholder="Enter OpenAI API Key">
+        <button id="saveKey">Save Key</button>
+      </div>
+    </div>
+
+    <div class="chat-container">
+      <div id="chatHistory" class="chat-history"></div>
+      <div class="input-area">
+        <textarea id="userInput" placeholder="Type your message here..."></textarea>
+        <button id="sendMessage">Send</button>
+      </div>
+    </div>
+
+    <div class="content-stats">
+      <h2>Current Content Structure</h2>
+      <div id="contentStructure"></div>
+    </div>
+
+    <div class="actions">
+      <button id="analyzeContent">Analyze Current Content</button>
+      <button id="generateContent">Generate New Content</button>
+      <button id="applyChanges">Apply Changes</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

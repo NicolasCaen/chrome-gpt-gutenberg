@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "WordPress GPT Content Generator",
+  "version": "1.0",
+  "description": "Generate and replace Gutenberg content using ChatGPT",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.wordpress.com/*",
+    "*://*.openai.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.wordpress.com/*", "*://*/wp-admin/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
