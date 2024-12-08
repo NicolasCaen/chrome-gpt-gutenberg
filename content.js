@@ -32,7 +32,6 @@ function getGutenbergContent() {
       if (event.data.type === 'WP_CONTENT_RESPONSE') {
         window.removeEventListener('message', handleMessage);
         const blocks = event.data.data;
-        // Traitement des blocks comme avant
         const structure = {
           headings: [],
           paragraphs: [],
@@ -40,15 +39,19 @@ function getGutenbergContent() {
         };
         
         blocks.forEach(block => {
+          // Vérifier si le contenu existe et le convertir en chaîne si nécessaire
+          const content = block.attributes?.content || '';
+          const contentStr = typeof content === 'string' ? content : '';
+          
           if (block.name === 'core/heading') {
             structure.headings.push({
-              content: block.attributes.content,
-              level: block.attributes.level
+              content: contentStr,
+              level: block.attributes?.level || 2
             });
           } else if (block.name === 'core/paragraph') {
-            const words = block.attributes.content.trim().split(/\s+/).length;
+            const words = contentStr.trim().split(/\s+/).filter(Boolean).length;
             structure.paragraphs.push({
-              content: block.attributes.content,
+              content: contentStr,
               wordCount: words
             });
             structure.totalWords += words;
