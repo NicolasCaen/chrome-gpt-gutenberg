@@ -1,5 +1,26 @@
+// Ajouter au début du fichier content.js
+console.log('Content script chargé');
+
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM chargé');
+});
+
+window.addEventListener('load', () => {
+  console.log('Page entièrement chargée');
+});
+
 // Function to analyze Gutenberg content
 function getGutenbergContent() {
+  console.log('Démarrage de getGutenbergContent');
+  
+  // Vérification de l'environnement
+  console.log({
+    wpExists: typeof wp !== 'undefined',
+    wpData: wp?.data ? 'exists' : 'missing',
+    document: document.readyState,
+    url: window.location.href
+  });
+
   try {
     // Ajout de logs de débogage
     console.log('wp object:', typeof wp);
@@ -49,6 +70,7 @@ function getGutenbergContent() {
 
     return { structure };
   } catch (error) {
+    console.error('Erreur dans getGutenbergContent:', error);
     return { error: error.message };
   }
 }
@@ -91,38 +113,63 @@ function updateGutenbergContent(newContent) {
 // Function to check if Gutenberg is ready
 function isGutenbergReady() {
   return new Promise((resolve) => {
+    const maxAttempts = 10;
+    let attempts = 0;
+    
     const checkGutenberg = () => {
-      if (
-        typeof wp !== 'undefined' &&
-        wp.data &&
-        (wp.data.select('core/block-editor') || wp.data.select('core/editor'))
-      ) {
-        resolve(true);
-      } else if (document.readyState === 'complete') {
-        resolve(false);
-      } else {
-        setTimeout(checkGutenberg, 100);
+      try {
+        console.log('Tentative', attempts + 1, 'de', maxAttempts);
+        
+        if (document.querySelector('.block-editor-block-list__layout')) {
+          console.log('Éditeur Gutenberg détecté dans le DOM');
+          resolve(true);
+          return;
+        }
+        
+        if (attempts >= maxAttempts) {
+          console.log('Nombre maximum de tentatives atteint');
+          resolve(false);
+          return;
+        }
+        
+        attempts++;
+        setTimeout(checkGutenberg, 1000);
+      } catch (error) {
+        console.error('Erreur dans checkGutenberg:', error);
+        attempts++;
+        setTimeout(checkGutenberg, 1000);
       }
     };
+    
     checkGutenberg();
   });
 }
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  isGutenbergReady().then(isReady => {
-    if (!isReady) {
-      sendResponse({ 
-        error: 'Gutenberg editor not ready. Please make sure you are on a WordPress page with Gutenberg editor and the page is fully loaded.' 
-      });
-      return;
-    }
+// Gestionnaire de messages
+function handleMessage(request) {
+  console.log('Message reçu dans content script:', request);
+  
+  if (request.action === 'getContent') {
+    return getGutenbergContent();
+  } else if (request.action === 'updateContent') {
+    return updateGutenbergContent(request.content);
+  }
+  
+  return { error: 'Unknown action' };
+}
 
-    if (request.action === 'getContent') {
-      sendResponse(getGutenbergContent());
-    } else if (request.action === 'updateContent') {
-      sendResponse(updateGutenbergContent(request.content));
+// Remplacer l'ancien listener par celui-ci
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('Message reçu dans content script:', request);
+  
+  isGutenbergReady().then(isReady => {
+    if (isReady) {
+      const response = handleMessage(request);
+      sendResponse(response);
+    } else {
+      sendResponse({ error: 'Gutenberg editor not ready' });
     }
   });
-  return true; // Important pour garder la connexion ouverte pour la réponse asynchrone
+  
+  return true; // Important pour le traitement asynchrone
 });

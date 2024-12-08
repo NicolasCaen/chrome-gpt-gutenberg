@@ -6,20 +6,27 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
-    "*://*.wordpress.com/*",
-    "*://*.openai.com/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html"
   },
+  "web_accessible_resources": [{
+    "resources": ["content.js"],
+    "matches": ["<all_urls>"]
+  }],
   "content_scripts": [
     {
-      "matches": ["*://*.wordpress.com/*", "*://*/wp-admin/*"],
+      "matches": [
+        "*://*.wordpress.com/*",
+        "*://*/wp-admin/*"
+      ],
       "js": ["content.js"],
-      "run_at": "document_end"
+      "run_at": "document_idle"
     }
   ]
 }
