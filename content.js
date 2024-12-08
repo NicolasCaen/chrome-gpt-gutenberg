@@ -1,78 +1,69 @@
+// Ajoutez ce code au début du fichier content.js
+function injectScript() {
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('injected.js');
+  (document.head || document.documentElement).appendChild(script);
+  script.onload = function() {
+    script.remove();
+  };
+}
 // Ajouter au début du fichier content.js
 console.log('Content script chargé');
 
+// Injecter le script dès que possible
+injectScript();
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM chargé');
+  // Réinjecter le script au cas où
+  injectScript();
 });
 
 window.addEventListener('load', () => {
   console.log('Page entièrement chargée');
+  // Une dernière tentative d'injection
+  injectScript();
 });
 
 // Function to analyze Gutenberg content
 function getGutenbergContent() {
-  console.log('Démarrage de getGutenbergContent');
-  
-  // Vérification de l'environnement
-  console.log({
-    wpExists: typeof wp !== 'undefined',
-    wpData: wp?.data ? 'exists' : 'missing',
-    document: document.readyState,
-    url: window.location.href
-  });
-
-  try {
-    // Ajout de logs de débogage
-    console.log('wp object:', typeof wp);
-    console.log('wp.data:', typeof wp.data);
-    console.log('block-editor:', wp.data?.select('core/block-editor'));
-    console.log('editor:', wp.data?.select('core/editor'));
-
-    if (typeof wp === 'undefined') {
-      return { error: 'WordPress not detected' };
-    }
-
-    // Vérification explicite de wp.data
-    if (!wp.data) {
-      return { error: 'wp.data is not available' };
-    }
-
-    // Récupération du sélecteur approprié
-    const editor = wp.data.select('core/block-editor') || wp.data.select('core/editor');
-    if (!editor) {
-      return { error: 'Neither block-editor nor editor is available' };
-    }
-
-    const blocks = editor.getBlocks();
-    console.log('Blocks found:', blocks);
-
-    const structure = {
-      headings: [],
-      paragraphs: [],
-      totalWords: 0
-    };
-
-    blocks.forEach(block => {
-      if (block.name === 'core/heading') {
-        structure.headings.push({
-          content: block.attributes.content,
-          level: block.attributes.level
+  return new Promise((resolve) => {
+    const handleMessage = (event) => {
+      if (event.data.type === 'WP_CONTENT_RESPONSE') {
+        window.removeEventListener('message', handleMessage);
+        const blocks = event.data.data;
+        // Traitement des blocks comme avant
+        const structure = {
+          headings: [],
+          paragraphs: [],
+          totalWords: 0
+        };
+        
+        blocks.forEach(block => {
+          if (block.name === 'core/heading') {
+            structure.headings.push({
+              content: block.attributes.content,
+              level: block.attributes.level
+            });
+          } else if (block.name === 'core/paragraph') {
+            const words = block.attributes.content.trim().split(/\s+/).length;
+            structure.paragraphs.push({
+              content: block.attributes.content,
+              wordCount: words
+            });
+            structure.totalWords += words;
+          }
         });
-      } else if (block.name === 'core/paragraph') {
-        const words = block.attributes.content.trim().split(/\s+/).length;
-        structure.paragraphs.push({
-          content: block.attributes.content,
-          wordCount: words
-        });
-        structure.totalWords += words;
+        
+        resolve({ structure });
+      } else if (event.data.type === 'WP_CONTENT_ERROR') {
+        resolve({ error: event.data.error });
       }
-    });
-
-    return { structure };
-  } catch (error) {
-    console.error('Erreur dans getGutenbergContent:', error);
-    return { error: error.message };
-  }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    window.postMessage({ type: 'GET_WP_CONTENT' }, '*');
+  });
 }
 
 // Function to update Gutenberg content
@@ -120,8 +111,20 @@ function isGutenbergReady() {
       try {
         console.log('Tentative', attempts + 1, 'de', maxAttempts);
         
-        if (document.querySelector('.block-editor-block-list__layout')) {
-          console.log('Éditeur Gutenberg détecté dans le DOM');
+        // Vérifie plusieurs sélecteurs possibles pour l'éditeur Gutenberg
+        const gutenbergSelectors = [
+          '.block-editor-block-list__layout',
+          '.editor-styles-wrapper',
+          '.wp-block-post-content',
+          '#editor'
+        ];
+        
+        const editorExists = gutenbergSelectors.some(selector => 
+          document.querySelector(selector) !== null
+        );
+        
+        if (editorExists) {
+          console.log('Éditeur Gutenberg détecté');
           resolve(true);
           return;
         }
@@ -133,24 +136,28 @@ function isGutenbergReady() {
         }
         
         attempts++;
-        setTimeout(checkGutenberg, 1000);
+        setTimeout(checkGutenberg, 2000); // Augmenté à 2 secondes
       } catch (error) {
         console.error('Erreur dans checkGutenberg:', error);
         attempts++;
-        setTimeout(checkGutenberg, 1000);
+        setTimeout(checkGutenberg, 2000);
       }
     };
     
-    checkGutenberg();
+    if (document.readyState === 'complete') {
+      checkGutenberg();
+    } else {
+      window.addEventListener('load', checkGutenberg);
+    }
   });
 }
 
-// Gestionnaire de messages
-function handleMessage(request) {
+// Fonction handleMessage asynchrone
+async function handleMessage(request) {
   console.log('Message reçu dans content script:', request);
   
   if (request.action === 'getContent') {
-    return getGutenbergContent();
+    return await getGutenbergContent();
   } else if (request.action === 'updateContent') {
     return updateGutenbergContent(request.content);
   }
@@ -158,18 +165,19 @@ function handleMessage(request) {
   return { error: 'Unknown action' };
 }
 
-// Remplacer l'ancien listener par celui-ci
+// Modifier le listener pour gérer correctement les promesses
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Message reçu dans content script:', request);
   
-  isGutenbergReady().then(isReady => {
+  isGutenbergReady().then(async isReady => {
     if (isReady) {
-      const response = handleMessage(request);
+      const response = await handleMessage(request);
       sendResponse(response);
     } else {
       sendResponse({ error: 'Gutenberg editor not ready' });
     }
   });
   
-  return true; // Important pour le traitement asynchrone
+  return true;
 });
+
